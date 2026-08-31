@@ -3091,12 +3091,27 @@ function playActionBeat(a,sk,col,done){
   el.onclick=()=>{ cancelAnimationFrame(raf); el.classList.remove("on"); el.innerHTML=""; done&&done(); el.onclick=null; };
   raf=requestAnimationFrame(frame);
 }
+const CLIP_URLS={};
+function clipUrl(src){
+  if(!src||src.slice(0,5)!=="data:")return src;
+  if(CLIP_URLS[src])return CLIP_URLS[src];
+  try{
+    const i=src.indexOf(",");
+    const bin=atob(src.slice(i+1));
+    const buf=new Uint8Array(bin.length);
+    for(let j=0;j<bin.length;j++)buf[j]=bin.charCodeAt(j);
+    const u=URL.createObjectURL(new Blob([buf],{type:"video/mp4"}));
+    CLIP_URLS[src]=u; return u;
+  }catch(e){ return src; }
+}
+window.__clipPlaying=false;
 function playUltimateClip(a,sk,done){
   const src=clipFor(a); if(!src)return false;
   const el=$("#ult");
   el.innerHTML=""; el.classList.add("on");
   const v=document.createElement("video");
-  v.src=src; v.muted=true; v.playsInline=true; v.autoplay=true;
+  v.src=clipUrl(src); v.muted=true; v.playsInline=true; v.preload="auto";
+  window.__clipPlaying=true;
   v.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000";
   el.appendChild(v);
   const band=document.createElement("div");
@@ -3109,6 +3124,7 @@ function playUltimateClip(a,sk,done){
   el.appendChild(skip);
   let dead=false;
   const finish=()=>{ if(dead)return; dead=true;
+    window.__clipPlaying=false;
     try{v.pause();}catch(e){}
     el.classList.remove("on"); el.innerHTML=""; el.onclick=null;
     const stg=$("#stage"); stg.classList.add("shakeit");
@@ -3116,7 +3132,10 @@ function playUltimateClip(a,sk,done){
     done&&done(); };
   v.onended=finish; el.onclick=finish;
   setTimeout(finish,11500);                       // watchdog: no clip may hang the turn
-  v.play&&v.play().catch(()=>{});
+  // start only when the decoder is ready, so the first second doesn't stutter
+  let started=false;
+  const go=()=>{ if(started||dead)return; started=true; v.play&&v.play().catch(()=>{}); };
+  v.oncanplaythrough=go; setTimeout(go,900);
   return true;
 }
 function playUltimate(a,sk,done){
@@ -3836,6 +3855,7 @@ function draw(){
   B.units.forEach(u=>{ if(u.flash>0)u.flash=Math.max(0,u.flash-0.06); });
 }
 function loop(){
+  if(window.__clipPlaying){ requestAnimationFrame(loop); return; }
   const anim=B&&B.units.some(u=>u.flash>0||(u.animUntil&&performance.now()<u.animUntil));
   const idling=B&&!B.over&&$("#battle").classList.contains("on");
   if(FLOATS.length||VFX.length||needDraw||anim||idling){ draw(); needDraw=FLOATS.length>0||VFX.length>0; }

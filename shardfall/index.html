@@ -89,7 +89,8 @@ canvas.next{background:transparent;display:block;margin:0 auto}
   background:linear-gradient(180deg,#fff,#9fd8ff 45%,#4a8cff);-webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 16px #7ff0ffcc) drop-shadow(0 3px 2px #000);
   opacity:0;pointer-events:none;letter-spacing:2px;font-style:italic}
-#comboPop.show{animation:pop .9s ease-out}
+#comboPop.show{animation:pop 1.05s ease-out}
+.hud span:nth-child(2){color:var(--gold);font-weight:700}
 @keyframes pop{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}18%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}
   70%{opacity:1}100%{opacity:0;transform:translate(-50%,-80%) scale(1)}}
 #vsIntro{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;gap:34px;z-index:28}
@@ -156,7 +157,7 @@ canvas.next{background:transparent;display:block;margin:0 auto}
   <div id="ladderDots"></div>
   <div id="arena">
     <div class="wellwrap">
-      <div class="hud"><span>NEXT</span><span id="pSent">sent 0</span></div>
+      <div class="hud"><span>NEXT</span><span id="pScore">0</span><span id="pSent">sent 0</span></div>
       <canvas class="next" id="pNext" width="96" height="48"></canvas>
       <canvas class="well" id="pWell"></canvas>
     </div>
@@ -177,7 +178,7 @@ canvas.next{background:transparent;display:block;margin:0 auto}
       </div>
     </div>
     <div class="wellwrap">
-      <div class="hud"><span>NEXT</span><span id="eSent">sent 0</span></div>
+      <div class="hud"><span>NEXT</span><span id="eScore">0</span><span id="eSent">sent 0</span></div>
       <canvas class="next" id="eNext" width="96" height="48"></canvas>
       <canvas class="well" id="eWell"></canvas>
     </div>
@@ -335,56 +336,45 @@ function findFused(grid){
   return out;
   function cellOk(grid,r,c,col){const g=grid[r]&&grid[r][c];return g&&g.t==="n"&&g.c===col;}
 }
-/* resolve crashes; returns {cells, fusedCells, chains, prismCells} */
-function resolve(well,fx){
-  const grid=well.grid;
-  let chain=0,total=0,fusedTotal=0;
-  applyGravity(grid);
-  for(;;){
-    well.fused=findFused(grid);
-    const inFused=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
-    for(const f of well.fused)for(let r=f.r;r<f.r+f.h;r++)for(let c=f.c;c<f.c+f.w;c++)inFused[r][c]=true;
-    // prisms first
-    let destroyed=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
-    let any=false,prismFired=false;
-    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-      const g=grid[r][c];
-      if(g&&g.t==="p"){
-        const below=r+1<ROWS?grid[r+1][c]:null;
-        destroyed[r][c]=true;any=true;prismFired=true;
-        if(below&&below.t!=="p"){
-          const col=below.c;
-          for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++){
-            const h=grid[rr][cc];
-            if(h&&(h.t==="n"||h.t==="x")&&h.c===col){destroyed[rr][cc]=true;}
-          }
+/* one detection pass: what pops right now? */
+function detectPops(grid){
+  const inFusedList=findFused(grid);
+  const inFused=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
+  for(const f of inFusedList)for(let r=f.r;r<f.r+f.h;r++)for(let c=f.c;c<f.c+f.w;c++)inFused[r][c]=true;
+  const destroyed=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
+  let any=false,prismFired=false;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const g=grid[r][c];
+    if(g&&g.t==="p"){
+      const below=r+1<ROWS?grid[r+1][c]:null;
+      destroyed[r][c]=true;any=true;prismFired=true;
+      if(below&&below.t!=="p"){
+        const col=below.c;
+        for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++){
+          const h=grid[rr][cc];
+          if(h&&(h.t==="n"||h.t==="x")&&h.c===col){destroyed[rr][cc]=true;}
         }
       }
     }
-    // crash gems
-    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-      const g=grid[r][c];
-      if(!g||g.t!=="x"||destroyed[r][c])continue;
-      // flood same color through n & x
-      const seen=new Set(),stack=[[r,c]],grp=[];
-      let touch=false;
-      while(stack.length){
-        const [rr,cc]=stack.pop(),key=rr*COLS+cc;
-        if(seen.has(key))continue;seen.add(key);
-        const h=grid[rr]&&grid[rr][cc];
-        if(!h||(h.t!=="n"&&h.t!=="x")||h.c!==g.c)continue;
-        grp.push([rr,cc]);
-        if(h.t==="n")touch=true;
-        [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr,dc])=>stack.push([rr+dr,cc+dc]));
-      }
-      if(grp.length>=2&&touch){
-        any=true;
-        for(const [rr,cc] of grp)destroyed[rr][cc]=true;
-      }
+  }
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const g=grid[r][c];
+    if(!g||g.t!=="x"||destroyed[r][c])continue;
+    const seen=new Set(),stack=[[r,c]],grp=[];
+    while(stack.length){
+      const [rr,cc]=stack.pop(),key=rr*COLS+cc;
+      if(seen.has(key))continue;seen.add(key);
+      const h=grid[rr]&&grid[rr][cc];
+      if(!h||(h.t!=="n"&&h.t!=="x")||h.c!==g.c)continue;
+      grp.push([rr,cc]);
+      [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr,dc])=>stack.push([rr+dr,cc+dc]));
     }
-    if(!any)break;
-    chain++;
-    // adjacent counters die with the blast
+    if(grp.length>=2){
+      any=true;
+      for(const [rr,cc] of grp)destroyed[rr][cc]=true;
+    }
+  }
+  if(any){
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
       if(!destroyed[r][c])continue;
       [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr,dc])=>{
@@ -392,20 +382,31 @@ function resolve(well,fx){
         if(h&&h.t==="k")destroyed[rr][cc]=true;
       });
     }
+  }
+  return {any,destroyed,prismFired,inFused};
+}
+/* synchronous resolve: AI planning + headless tests */
+function resolve(well,fx){
+  const grid=well.grid;
+  let chain=0,total=0,fusedTotal=0;
+  applyGravity(grid);
+  for(;;){
+    const d=detectPops(grid);
+    well.fused=findFused(grid);
+    if(!d.any)break;
+    chain++;
     let cells=0,fusedC=0;
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-      if(destroyed[r][c]){
+      if(d.destroyed[r][c]){
         cells++;
-        if(inFused[r][c])fusedC++;
+        if(d.inFused[r][c])fusedC++;
         if(fx)fx.burst(well,r,c,grid[r][c]);
         grid[r][c]=null;
       }
     }
     total+=cells;fusedTotal+=fusedC;
-    if(prismFired)sfx.prism();else sfx.crash(chain);
-    if(chain>1)sfx.chain(chain);
+    if(fx){ if(d.prismFired)sfx.prism();else sfx.crash(chain); if(chain>1){sfx.chain(chain);fx.combo(chain);} }
     applyGravity(grid);
-    if(fx&&chain>1)fx.combo(chain);
   }
   well.fused=findFused(grid);
   well.chainBest=Math.max(well.chainBest,chain);
@@ -510,11 +511,13 @@ const FX={
     addShake(1.2);
   },
   combo(n){
-    const el=$("#comboPop");
-    const tier=n>=5?"STARFALL":n>=4?"SHATTERSTORM":n>=3?"TEMPEST":"WEAVE";
-    el.textContent=tier+" ×"+n;
-    el.classList.remove("show");void el.offsetWidth;el.classList.add("show");
+    FX.callout((n>=5?"STARFALL":n>=4?"SHATTERSTORM":n>=3?"TEMPEST":"WEAVE")+" ×"+n);
     addShake(n*2.2);
+  },
+  callout(text){
+    const el=$("#comboPop");
+    el.textContent=text;
+    el.classList.remove("show");void el.offsetWidth;el.classList.add("show");
   }
 };
 const fxCanvas=document.createElement("canvas");
@@ -568,14 +571,22 @@ function drawWell(well){
   well.canvas.parentElement.classList.toggle("danger",topmost<=4&&topmost<ROWS);
   const fusedAt=Array.from({length:ROWS},()=>new Array(COLS).fill(null));
   for(const f of well.fused)for(let r=f.r;r<f.r+f.h;r++)for(let c=f.c;c<f.c+f.w;c++)fusedAt[r][c]=f;
+  const t0=performance.now();
   for(let r=HIDDEN;r<ROWS;r++)for(let c=0;c<COLS;c++){
     const g=well.grid[r][c];if(!g)continue;
-    if(fusedAt[r][c]){
+    const dying=well.dying&&well.dying.has(r+","+c);
+    if(fusedAt[r][c]&&!dying){
       const f=fusedAt[r][c];
       if(f.r===r&&f.c===c)drawFused(x,f);
       continue;
     }
     drawGem(x,c*CELL,(r-HIDDEN)*CELL,g);
+    if(dying){
+      x.globalAlpha=0.3+0.4*Math.abs(Math.sin(t0/70));
+      x.fillStyle="#fff";
+      rr(x,c*CELL+1,(r-HIDDEN)*CELL+1,CELL-2,CELL-2,7);x.fill();
+      x.globalAlpha=1;
+    }
   }
   if(well.pair){
     const p=well.pair,[sr,sc]=well.satPos(p);
@@ -771,40 +782,85 @@ function endMatch(winner){
   setTimeout(()=>$("#koOverlay").classList.add("on"),650);
   if(win&&GAME.mode==="ladder"){GAME.wins++;}
 }
-/* per-well step: returns attack sent */
+/* staged burst-sequence resolution: each chain step is visible */
+const STEP_FLASH=430;
+function stepResolve(W,foe,isPlayer,now){
+  const rs=W.rs;
+  if(rs.phase==="scan"){
+    applyGravity(W.grid);
+    const d=detectPops(W.grid);
+    W.fused=findFused(W.grid);
+    if(!d.any){rs.phase="post";return;}
+    rs.chain++;rs.d=d;
+    W.dying=new Set();
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(d.destroyed[r][c])W.dying.add(r+","+c);
+    rs.until=now+STEP_FLASH+(rs.chain>1?90:0);
+    if(d.prismFired)sfx.prism();else sfx.crash(rs.chain);
+    if(rs.chain>1){sfx.chain(rs.chain);FX.combo(rs.chain);}
+    rs.phase="burst";
+    return;
+  }
+  if(rs.phase==="burst"){
+    if(now<rs.until)return;                    // hold: gems flare while the combo reads
+    const d=rs.d;let cells=0,fusedC=0;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(d.destroyed[r][c]){
+        cells++;
+        if(d.inFused[r][c])fusedC++;
+        FX.burst(W,r,c,W.grid[r][c]);
+        W.grid[r][c]=null;
+      }
+    }
+    W.dying=null;
+    rs.cells+=cells;rs.fused+=fusedC;
+    const mult=CHAIN_MULT[Math.min(rs.chain,CHAIN_MULT.length-1)];
+    W.score=(W.score||0)+Math.round((cells+fusedC)*10*mult);
+    applyGravity(W.grid);
+    rs.phase="scan";
+    return;
+  }
+  // rs.phase==="post": totals settle, shards fly, next pair
+  W.chainBest=Math.max(W.chainBest,rs.chain);
+  const res={cells:rs.cells,fused:rs.fused,chains:rs.chain};
+  W.rs=null;
+  let atk=attackFrom(res);
+  if(rs.cells>0&&W.grid.every(row=>row.every(c=>!c))){
+    atk+=8;W.score=(W.score||0)+2500;         // the loom stands empty: all-clear bonus
+    FX.callout("LOOM CLEARED! +8");
+    sfx.win();addShake(10);
+  }
+  if(atk>0){
+    const off=Math.min(W.pending,atk);
+    W.pending-=off;
+    const rest=atk-off;
+    if(rest>0){foe.pending+=rest;W.sent+=rest;
+      const side=isPlayer?"#pSide":"#eSide",tgt=isPlayer?"#eSide":"#pSide";
+      $(side).classList.add("atk");$(tgt).classList.add("hit");
+      setTimeout(()=>{$(side).classList.remove("atk");$(tgt).classList.remove("hit");},320);
+      attackStreak(isPlayer?"P":"E");
+      damageFloat(rest,isPlayer?"P":"E");
+      faceAttack(isPlayer?"P":"E",rest>=6);
+      addShake(Math.min(10,2+rest*0.7));
+    }
+  }
+  if(W.pending>0){
+    const n=Math.min(W.pending,18);
+    W.pending-=dropGarbage(W,n);
+    W.canvas.classList.add("flash");setTimeout(()=>W.canvas.classList.remove("flash"),200);
+    addShake(Math.min(12,3+n*0.5));
+    resolve(W,null);
+  }
+  if(W.grid[HIDDEN][2]){W.dead=true;endMatch(isPlayer?"E":"P");return;}
+  W.spawn();drawNext(W);
+  if(!isPlayer){M.aiMove=aiPlan(W,M.diff);M.aiNext=now+M.diff.react;}
+  if(W.dead){endMatch(isPlayer?"E":"P");}
+}
+/* per-well step */
 function stepWell(W,foe,isPlayer,now){
   if(W.dead)return;
   if(!W.pair){
-    // resolve after lock
-    const res=resolve(W,FX);
-    const atk=attackFrom(res);
-    if(atk>0){
-      // offset own pending first
-      const off=Math.min(W.pending,atk);
-      W.pending-=off;
-      const rest=atk-off;
-      if(rest>0){foe.pending+=rest;W.sent+=rest;
-        const side=isPlayer?"#pSide":"#eSide",tgt=isPlayer?"#eSide":"#pSide";
-        $(side).classList.add("atk");$(tgt).classList.add("hit");
-        setTimeout(()=>{$(side).classList.remove("atk");$(tgt).classList.remove("hit");},320);
-        attackStreak(isPlayer?"P":"E");
-        damageFloat(rest,isPlayer?"P":"E");
-        faceAttack(isPlayer?"P":"E",rest>=6);
-        addShake(Math.min(10,2+rest*0.7));
-      }
-    }
-    // take garbage before next spawn
-    if(W.pending>0){
-      const n=Math.min(W.pending,18);
-      W.pending-=dropGarbage(W,n);
-      W.canvas.classList.add("flash");setTimeout(()=>W.canvas.classList.remove("flash"),200);
-      addShake(Math.min(12,3+n*0.5));
-      resolve(W,null); // settle only (no crashes expected but fuses recompute)
-    }
-    if(W.grid[HIDDEN][2]){W.dead=true;endMatch(isPlayer?"E":"P");return;}
-    W.spawn();drawNext(W);
-    if(!isPlayer){M.aiMove=aiPlan(W,M.diff);M.aiNext=now+M.diff.react;}
-    if(W.dead){endMatch(isPlayer?"E":"P");}
+    if(!W.rs)W.rs={phase:"scan",chain:0,cells:0,fused:0};
+    stepResolve(W,foe,isPlayer,now);
     return;
   }
   // falling
@@ -840,6 +896,8 @@ function loop(){
   drawWell(M.P);drawWell(M.E);
   $("#pSent").textContent="sent "+M.P.sent;
   $("#eSent").textContent="sent "+M.E.sent;
+  $("#pScore").textContent=(M.P.score||0).toLocaleString();
+  $("#eScore").textContent=(M.E.score||0).toLocaleString();
   inc($("#pInc"),M.P.pending);inc($("#eInc"),M.E.pending);
   function inc(el,n){
     const want=Math.min(n,24);

@@ -579,13 +579,6 @@ function drawWell(well){
   }
   if(well.pair){
     const p=well.pair,[sr,sc]=well.satPos(p);
-    // ghost
-    let gr=p.row;while(well.fits(gr+1,p.col,p.rot))gr++;
-    const d=[[-1,0],[0,1],[1,0],[0,-1]][p.rot];
-    x.globalAlpha=0.22;
-    drawGem(x,p.col*CELL,(gr-HIDDEN)*CELL,p.a);
-    drawGem(x,(p.col+d[1])*CELL,(gr+d[0]-HIDDEN)*CELL,p.b);
-    x.globalAlpha=1;
     drawGem(x,p.col*CELL,(p.row-HIDDEN)*CELL,p.a);
     if(sr>=HIDDEN)drawGem(x,sc*CELL,(sr-HIDDEN)*CELL,p.b);
   }
